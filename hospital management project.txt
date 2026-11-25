@@ -1,0 +1,203 @@
+CREATE DATABASE IF NOT EXISTS hospital;
+USE hospital;
+
+-- Departments table (referenced in staff management, doctor registration)
+CREATE TABLE departments (
+    dept_id INT AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(255) NOT NULL UNIQUE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+
+-- Patients table (core patient data, used in login, registration, and many queries)
+CREATE TABLE patients (
+    patient_id INT AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(255) NOT NULL,
+    age INT NOT NULL,
+    gender ENUM('M', 'F', 'Other') NOT NULL,
+    contact_no VARCHAR(20),
+    insurance VARCHAR(255),
+    username VARCHAR(255) UNIQUE,
+    password_hash VARCHAR(255),
+    reg_date DATE DEFAULT (CURRENT_DATE)  -- Used in daily_summary()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+
+-- Staff table (staff data, used in login, management, and as foreign key in many tables)
+CREATE TABLE staff (
+    staff_id INT AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(255) NOT NULL,
+    role VARCHAR(255) NOT NULL,  -- e.g., 'Doctor', 'Nurse'
+    department_id INT,
+    username VARCHAR(255) UNIQUE,
+    password_hash VARCHAR(255),
+    availability TEXT,  -- Used in doctor_management() for status updates
+    FOREIGN KEY (department_id) REFERENCES departments(dept_id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+
+-- Attendance table (staff attendance tracking)
+CREATE TABLE attendance (
+    attendance_id INT AUTO_INCREMENT PRIMARY KEY,
+    staff_id INT NOT NULL,
+    date DATE NOT NULL,
+    status ENUM('P', 'A') NOT NULL,  -- Present/Absent
+    FOREIGN KEY (staff_id) REFERENCES staff(staff_id) ON DELETE CASCADE,
+    UNIQUE(staff_id, date)  -- Prevent duplicate entries per staff per day
+) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+
+-- Appointments table (patient-doctor appointments)
+CREATE TABLE appointments (
+    appointment_id INT AUTO_INCREMENT PRIMARY KEY,
+    patient_id INT NOT NULL,
+    doctor_id INT NOT NULL,
+    appointment_date DATE NOT NULL,
+    FOREIGN KEY (patient_id) REFERENCES patients(patient_id) ON DELETE CASCADE,
+    FOREIGN KEY (doctor_id) REFERENCES staff(staff_id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+
+-- OPD Records table (Outpatient Department admissions)
+CREATE TABLE opd_records (
+    record_id INT AUTO_INCREMENT PRIMARY KEY,
+    patient_id INT NOT NULL,
+    admit_date DATETIME NOT NULL,
+    discharge_date DATETIME,
+    FOREIGN KEY (patient_id) REFERENCES patients(patient_id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+
+-- ICU Records table (Intensive Care Unit admissions)
+CREATE TABLE icu_records (
+    record_id INT AUTO_INCREMENT PRIMARY KEY,
+    patient_id INT NOT NULL,
+    admit_date DATETIME NOT NULL,
+    discharge_date DATETIME,
+    FOREIGN KEY (patient_id) REFERENCES patients(patient_id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+
+-- Lab Tests table (available lab tests)
+CREATE TABLE lab_tests (
+    test_id INT AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(255) NOT NULL,
+    cost DECIMAL(10,2) NOT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+
+-- Patient Lab Results table (links patients to tests and results)
+CREATE TABLE patient_lab_results (
+    record_id INT AUTO_INCREMENT PRIMARY KEY,
+    patient_id INT NOT NULL,
+    test_id INT NOT NULL,
+    technician_id INT,  -- Optional, references staff
+    test_date DATETIME DEFAULT CURRENT_TIMESTAMP,
+    result TEXT,
+    result_date DATETIME,
+    FOREIGN KEY (patient_id) REFERENCES patients(patient_id) ON DELETE CASCADE,
+    FOREIGN KEY (test_id) REFERENCES lab_tests(test_id) ON DELETE CASCADE,
+    FOREIGN KEY (technician_id) REFERENCES staff(staff_id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+
+-- Surgeries table (surgery records)
+CREATE TABLE surgeries (
+    surgery_id INT AUTO_INCREMENT PRIMARY KEY,
+    patient_id INT NOT NULL,
+    surgeon_id INT NOT NULL,
+    surgery_type VARCHAR(255) NOT NULL,
+    date DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (patient_id) REFERENCES patients(patient_id) ON DELETE CASCADE,
+    FOREIGN KEY (surgeon_id) REFERENCES staff(staff_id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+
+-- Prescriptions table (doctor prescriptions for patients)
+CREATE TABLE prescriptions (
+    prescription_id INT AUTO_INCREMENT PRIMARY KEY,
+    patient_id INT NOT NULL,
+    doctor_id INT NOT NULL,
+    medicines TEXT,  -- Comma-separated or detailed list
+    vitals TEXT,
+    notes TEXT,
+    date DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (patient_id) REFERENCES patients(patient_id) ON DELETE CASCADE,
+    FOREIGN KEY (doctor_id) REFERENCES staff(staff_id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+
+-- Bills table (billing records)
+CREATE TABLE bills (
+    bill_id INT AUTO_INCREMENT PRIMARY KEY,
+    patient_id INT NOT NULL,
+    amount DECIMAL(10,2) NOT NULL,
+    insurance_covered DECIMAL(10,2) DEFAULT 0,
+    date DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (patient_id) REFERENCES patients(patient_id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+
+-- Insurance Claims table (insurance details linked to bills)
+CREATE TABLE insurance_claims (
+    claim_id INT AUTO_INCREMENT PRIMARY KEY,
+    patient_id INT NOT NULL,
+    insurance_company VARCHAR(255) NOT NULL,
+    claim_amount DECIMAL(10,2) NOT NULL,
+    date DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (patient_id) REFERENCES patients(patient_id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+
+-- Patient Vitals table (health vitals tracking)
+CREATE TABLE patient_vitals (
+    vitals_id INT AUTO_INCREMENT PRIMARY KEY,
+    patient_id INT NOT NULL,
+    temperature DECIMAL(5,2),  -- e.g., 98.6
+    heart_rate INT,
+    blood_pressure VARCHAR(20),  -- e.g., '120/80'
+    respiratory_rate INT,
+    date_recorded DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (patient_id) REFERENCES patients(patient_id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+
+-- Pharmacy table (medicine inventory)
+CREATE TABLE pharmacy (
+    med_id INT AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(255) NOT NULL,
+    quantity INT NOT NULL,
+    price DECIMAL(10,2) NOT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+
+-- Blood Bank table (blood unit inventory)
+CREATE TABLE blood_bank (
+    blood_id INT AUTO_INCREMENT PRIMARY KEY,
+    blood_type VARCHAR(10) NOT NULL,  -- e.g., 'A+', 'O-'
+    quantity INT NOT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+
+-- Canteen table (canteen sales records)
+CREATE TABLE canteen (
+    sale_id INT AUTO_INCREMENT PRIMARY KEY,
+    item VARCHAR(255) NOT NULL,
+    amount DECIMAL(10,2) NOT NULL,
+    date DATETIME DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+
+-- Feedback table (patient feedback for doctors or hospital)
+CREATE TABLE feedback (
+    feedback_id INT AUTO_INCREMENT PRIMARY KEY,
+    patient_id INT NOT NULL,
+    doctor_id INT,  -- Optional, for doctor-specific feedback
+    rating INT NOT NULL CHECK (rating BETWEEN 1 AND 5),
+    comment TEXT,
+    date DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (patient_id) REFERENCES patients(patient_id) ON DELETE CASCADE,
+    FOREIGN KEY (doctor_id) REFERENCES staff(staff_id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+
+-- Beds table (bed count for summaries, not directly manipulated but counted)
+CREATE TABLE beds (
+    bed_id INT AUTO_INCREMENT PRIMARY KEY,
+    type VARCHAR(255),  -- e.g., 'ICU', 'General'
+    total_count INT NOT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+
+-- Create salaries table 
+CREATE TABLE salaries (
+    salary_id INT AUTO_INCREMENT PRIMARY KEY,
+    staff_id INT NOT NULL,
+    month VARCHAR(7) NOT NULL,  -- Stores YYYY-MM format (e.g., '2023-10')
+    base_salary DECIMAL(10,2) NOT NULL,
+    attendance_bonus DECIMAL(10,2) DEFAULT 0.00,
+    total_salary DECIMAL(10,2) NOT NULL,
+    generated_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (staff_id) REFERENCES staff(staff_id) ON DELETE CASCADE,
+    UNIQUE KEY unique_staff_month (staff_id, month)  -- Prevents duplicates
+) ENGINE=InnoDB DEFAULT CHARSET=utf8;
